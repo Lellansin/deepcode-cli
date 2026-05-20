@@ -1,10 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Box, Static, Text, useApp, useStdout, useWindowSize } from "ink";
 import chalk from "chalk";
-import * as fs from "fs";
-import * as os from "os";
-import * as path from "path";
-import OpenAI from "openai";
 import {
   type LlmStreamProgress,
   type MessageMeta,
@@ -16,13 +12,9 @@ import {
   type UndoTarget,
   type UserPromptContent,
 } from "../session";
-import {
-  applyModelConfigSelection,
-  type DeepcodingSettings,
-  type ModelConfigSelection,
-  type ResolvedDeepcodingSettings,
-  resolveSettingsSources,
-} from "../settings";
+import { type ModelConfigSelection } from "../settings";
+import { resolveCurrentSettings, writeModelConfigSelection } from "../common/settings";
+import { createOpenAIClient } from "../common/openai-client";
 import { PromptInput, type PromptDraft, type PromptSubmission } from "./PromptInput";
 import { MessageView, RawModeExitPrompt } from "./components";
 import { SessionList } from "./SessionList";
@@ -41,9 +33,6 @@ import {
 import { buildExitSummaryText } from "./exitSummary";
 import { RawMode, useRawModeContext } from "./contexts";
 import { renderMessageToStdout } from "./components/MessageView/utils";
-
-const DEFAULT_MODEL = "deepseek-v4-pro";
-const DEFAULT_BASE_URL = "https://api.deepseek.com";
 
 type View = "chat" | "session-list" | "undo" | "mcp-status";
 
@@ -770,144 +759,6 @@ function buildStatusLine(entry: SessionEntry): string {
     parts.push(`fail: ${entry.failReason}`);
   }
   return parts.join(" · ");
-}
-
-export function readSettings(): DeepcodingSettings | null {
-  return readSettingsFile(getUserSettingsPath());
-}
-
-export function readProjectSettings(projectRoot: string = process.cwd()): DeepcodingSettings | null {
-  return readSettingsFile(getProjectSettingsPath(projectRoot));
-}
-
-function readSettingsFile(settingsPath: string): DeepcodingSettings | null {
-  try {
-    if (!fs.existsSync(settingsPath)) {
-      return null;
-    }
-    const raw = fs.readFileSync(settingsPath, "utf8");
-    return JSON.parse(raw) as DeepcodingSettings;
-  } catch {
-    return null;
-  }
-}
-
-export function writeSettings(settings: DeepcodingSettings): void {
-  const settingsPath = getUserSettingsPath();
-  writeSettingsFile(settingsPath, settings);
-}
-
-export function writeProjectSettings(settings: DeepcodingSettings, projectRoot: string = process.cwd()): void {
-  const settingsPath = getProjectSettingsPath(projectRoot);
-  writeSettingsFile(settingsPath, settings);
-}
-
-function writeSettingsFile(settingsPath: string, settings: DeepcodingSettings): void {
-  fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
-  fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
-}
-
-export function writeModelConfigSelection(
-  selection: ModelConfigSelection,
-  current: ModelConfigSelection = resolveCurrentSettings(),
-  projectRoot: string = process.cwd()
-): { changed: boolean; settings: DeepcodingSettings } {
-  const projectSettingsPath = getProjectSettingsPath(projectRoot);
-  const shouldWriteProjectSettings = fs.existsSync(projectSettingsPath);
-  const rawSettings = shouldWriteProjectSettings ? readProjectSettings(projectRoot) : readSettings();
-  const result = applyModelConfigSelection(rawSettings, current, selection);
-  if (result.changed) {
-    if (shouldWriteProjectSettings) {
-      writeProjectSettings(result.settings, projectRoot);
-    } else {
-      writeSettings(result.settings);
-    }
-  }
-  return result;
-}
-
-export function resolveCurrentSettings(projectRoot: string = process.cwd()): ResolvedDeepcodingSettings {
-  return resolveSettingsSources(
-    readSettings(),
-    readProjectSettings(projectRoot),
-    {
-      model: DEFAULT_MODEL,
-      baseURL: DEFAULT_BASE_URL,
-    },
-    process.env
-  );
-}
-
-export function createOpenAIClient(projectRoot: string = process.cwd()): {
-  client: OpenAI | null;
-  model: string;
-  baseURL: string;
-  thinkingEnabled: boolean;
-  reasoningEffort: "high" | "max";
-  debugLogEnabled: boolean;
-  notify?: string;
-  webSearchTool?: string;
-  env: Record<string, string>;
-  machineId?: string;
-} {
-  const settings = resolveCurrentSettings(projectRoot);
-  if (!settings.apiKey) {
-    return {
-      client: null,
-      model: settings.model,
-      baseURL: settings.baseURL,
-      thinkingEnabled: settings.thinkingEnabled,
-      reasoningEffort: settings.reasoningEffort,
-      debugLogEnabled: settings.debugLogEnabled,
-      notify: settings.notify,
-      webSearchTool: settings.webSearchTool,
-      env: settings.env,
-      machineId: getMachineId(),
-    };
-  }
-
-  const client = new OpenAI({
-    apiKey: settings.apiKey,
-    baseURL: settings.baseURL || undefined,
-  });
-  return {
-    client,
-    model: settings.model,
-    baseURL: settings.baseURL,
-    thinkingEnabled: settings.thinkingEnabled,
-    reasoningEffort: settings.reasoningEffort,
-    debugLogEnabled: settings.debugLogEnabled,
-    notify: settings.notify,
-    webSearchTool: settings.webSearchTool,
-    env: settings.env,
-    machineId: getMachineId(),
-  };
-}
-
-function getMachineId(): string | undefined {
-  try {
-    const idPath = path.join(os.homedir(), ".deepcode", "machine-id");
-    if (fs.existsSync(idPath)) {
-      const raw = fs.readFileSync(idPath, "utf8").trim();
-      if (raw) {
-        return raw;
-      }
-    }
-    const generated = `${os.hostname()}-${Math.random().toString(36).slice(2)}-${Date.now()}`;
-    fs.mkdirSync(path.dirname(idPath), { recursive: true });
-    fs.writeFileSync(idPath, generated, "utf8");
-    return generated;
-  } catch {
-    return undefined;
-  }
-}
-
-function getUserSettingsPath(): string {
-  return path.join(os.homedir(), ".deepcode", "settings.json");
-}
-
-function getProjectSettingsPath(projectRoot: string): string {
-  return path.join(projectRoot, ".deepcode", "settings.json");
 }
 
 function formatThinkingMode(settings: Pick<ModelConfigSelection, "thinkingEnabled" | "reasoningEffort">): string {
