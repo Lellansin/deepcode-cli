@@ -247,6 +247,12 @@ export function App({ projectRoot, version = "", initialSessionId, onRestart }: 
   initialSessionIdRef.current = initialSessionId;
   useEffect(() => {
     const sessionId = initialSessionIdRef.current;
+    if (sessionId === "") {
+      refreshSessionsList();
+      setShowWelcome(false);
+      setView("session-list");
+      return;
+    }
     if (sessionId) {
       const session = sessionManager.getSession(sessionId);
       if (session) {

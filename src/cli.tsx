@@ -19,6 +19,7 @@ if (args.includes("--help") || args.includes("-h")) {
       "",
       "Usage:",
       "  deepcode                    Launch the interactive TUI in the current directory",
+      "  deepcode -r                  Open the session picker to resume a conversation",
       "  deepcode -r <session-id>    Resume a specific session directly",
       "  deepcode --resume <id>      Same as -r",
       "  deepcode --version          Print the version",
@@ -50,12 +51,20 @@ if (args.includes("--help") || args.includes("-h")) {
 
 function parseResumeArg(args: string[]): string | null {
   const rIndex = args.indexOf("-r");
-  if (rIndex !== -1 && rIndex + 1 < args.length) {
-    return args[rIndex + 1];
+  if (rIndex !== -1) {
+    const next = args[rIndex + 1];
+    if (next && !next.startsWith("-")) {
+      return next;
+    }
+    return ""; // -r without session-id → show session list
   }
   const resumeIndex = args.indexOf("--resume");
-  if (resumeIndex !== -1 && resumeIndex + 1 < args.length) {
-    return args[resumeIndex + 1];
+  if (resumeIndex !== -1) {
+    const next = args[resumeIndex + 1];
+    if (next && !next.startsWith("-")) {
+      return next;
+    }
+    return ""; // --resume without session-id → show session list
   }
   return null;
 }
