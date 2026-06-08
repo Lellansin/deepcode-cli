@@ -37,10 +37,11 @@ type View = "chat" | "session-list";
 type AppProps = {
   projectRoot: string;
   version?: string;
+  initialSessionId?: string | null;
   onRestart?: () => void;
 };
 
-export function App({ projectRoot, version = "", onRestart }: AppProps): React.ReactElement {
+export function App({ projectRoot, version = "", initialSessionId, onRestart }: AppProps): React.ReactElement {
   const { exit } = useApp();
   const { stdout, write } = useStdout();
   const { columns } = useWindowSize();
@@ -241,6 +242,19 @@ export function App({ projectRoot, version = "", onRestart }: AppProps): React.R
     },
     [sessionManager]
   );
+
+  const initialSessionIdRef = useRef(initialSessionId);
+  initialSessionIdRef.current = initialSessionId;
+  useEffect(() => {
+    const sessionId = initialSessionIdRef.current;
+    if (sessionId) {
+      const session = sessionManager.getSession(sessionId);
+      if (session) {
+        void handleSelectSession(sessionId);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [stableColumns, setStableColumns] = useState(columns);
   useEffect(() => {

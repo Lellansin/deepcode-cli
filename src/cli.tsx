@@ -18,9 +18,11 @@ if (args.includes("--help") || args.includes("-h")) {
       "deepcode - Deep Code CLI",
       "",
       "Usage:",
-      "  deepcode               Launch the interactive TUI in the current directory",
-      "  deepcode --version     Print the version",
-      "  deepcode --help        Show this help",
+      "  deepcode                    Launch the interactive TUI in the current directory",
+      "  deepcode -r <session-id>    Resume a specific session directly",
+      "  deepcode --resume <id>      Same as -r",
+      "  deepcode --version          Print the version",
+      "  deepcode --help             Show this help",
       "",
       "Configuration:",
       "  ~/.deepcode/settings.json   API key, model, base URL",
@@ -46,7 +48,20 @@ if (args.includes("--help") || args.includes("-h")) {
   process.exit(0);
 }
 
+function parseResumeArg(args: string[]): string | null {
+  const rIndex = args.indexOf("-r");
+  if (rIndex !== -1 && rIndex + 1 < args.length) {
+    return args[rIndex + 1];
+  }
+  const resumeIndex = args.indexOf("--resume");
+  if (resumeIndex !== -1 && resumeIndex + 1 < args.length) {
+    return args[resumeIndex + 1];
+  }
+  return null;
+}
+
 const projectRoot = process.cwd();
+const initialSessionId = parseResumeArg(args);
 configureWindowsShell();
 
 if (!process.stdin.isTTY) {
@@ -69,6 +84,7 @@ async function main(): Promise<void> {
       <App
         projectRoot={projectRoot}
         version={packageInfo.version}
+        initialSessionId={initialSessionId}
         onRestart={() => restartRef.current?.()}
       />,
       { exitOnCtrlC: false }
