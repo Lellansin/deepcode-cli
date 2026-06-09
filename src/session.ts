@@ -76,6 +76,10 @@ type ChatCompletionDebugOptions = {
 
 const CONTEXT_SIZE_SUFFIX_RE = /\[(\d+(?:\.\d+)?)(k|m)\]$/i;
 
+export function stripModelContextSizeSuffix(model: string): string {
+  return model.replace(CONTEXT_SIZE_SUFFIX_RE, "").trimEnd();
+}
+
 function parseContextSizeSuffix(model: string): number | undefined {
   const match = CONTEXT_SIZE_SUFFIX_RE.exec(model);
   if (!match) {
@@ -776,7 +780,7 @@ ${agentInstructions}
       const response = await this.createChatCompletionStream(
         client,
         {
-          model,
+          model: stripModelContextSizeSuffix(model),
           temperature: 0.1,
           messages: [
             { role: "system", content: systemPrompt },
@@ -1371,7 +1375,7 @@ ${agentInstructions}
         const response = await this.createChatCompletionStream(
           client,
           {
-            model,
+            model: stripModelContextSizeSuffix(model),
             ...(temperature !== undefined ? { temperature } : {}),
             messages,
             tools: getTools(this.getPromptToolOptions(), this.mcpToolDefinitions),
@@ -1546,7 +1550,7 @@ ${agentInstructions}
     const response = await this.createChatCompletionStream(
       client,
       {
-        model,
+        model: stripModelContextSizeSuffix(model),
         ...(temperature !== undefined ? { temperature } : {}),
         messages: [{ role: "user", content: compactPrompt }],
         ...thinkingOptions,
