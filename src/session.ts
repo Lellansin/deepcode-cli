@@ -80,6 +80,53 @@ export function stripModelContextSizeSuffix(model: string): string {
   return model.replace(CONTEXT_SIZE_SUFFIX_RE, "").trimEnd();
 }
 
+function repairToolCallArguments(args: string): string {
+  try {
+    JSON.parse(args);
+    return args;
+  } catch (e) {
+    if (e instanceof SyntaxError && e.message.includes("JSON") && "position" in (e as NodeJS.ErrnoException)) {
+      // Node's JSON.parse error doesn't expose position directly; use a scan instead.
+    }
+    // Find the longest valid JSON prefix by scanning for the end of the top-level value.
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    let validEnd = -1;
+    for (let i = 0; i < args.length; i++) {
+      const ch = args[i];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (ch === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (inString) continue;
+      if (ch === "{" || ch === "[") depth++;
+      else if (ch === "}" || ch === "]") {
+        depth--;
+        if (depth === 0) validEnd = i;
+      }
+    }
+    if (validEnd >= 0 && validEnd < args.length - 1) {
+      const candidate = args.slice(0, validEnd + 1);
+      try {
+        JSON.parse(candidate);
+        return candidate;
+      } catch {
+        // fall through
+      }
+    }
+    return args;
+  }
+}
+
 function parseContextSizeSuffix(model: string): number | undefined {
   const match = CONTEXT_SIZE_SUFFIX_RE.exec(model);
   if (!match) {
@@ -2239,14 +2286,21 @@ ${agentInstructions}
 
       const record = toolCall as Record<string, unknown>;
       const id = typeof record.id === "string" ? record.id.trim() : "";
-      if (id) {
-        return toolCall;
+      const withId = id ? record : { ...record, id: this.generateToolCallId() };
+
+      const fn = withId.function;
+      if (fn && typeof fn === "object" && !Array.isArray(fn)) {
+        const fnRecord = fn as Record<string, unknown>;
+        const args = fnRecord.arguments;
+        if (typeof args === "string") {
+          const fixedArgs = repairToolCallArguments(args);
+          if (fixedArgs !== args) {
+            return { ...withId, function: { ...fnRecord, arguments: fixedArgs } };
+          }
+        }
       }
 
-      return {
-        ...record,
-        id: this.generateToolCallId(),
-      };
+      return withId;
     });
   }
 
