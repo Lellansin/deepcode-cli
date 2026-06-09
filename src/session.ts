@@ -74,7 +74,24 @@ type ChatCompletionDebugOptions = {
   params?: Record<string, unknown>;
 };
 
+const CONTEXT_SIZE_SUFFIX_RE = /\[(\d+(?:\.\d+)?)(k|m)\]$/i;
+
+function parseContextSizeSuffix(model: string): number | undefined {
+  const match = CONTEXT_SIZE_SUFFIX_RE.exec(model);
+  if (!match) {
+    return undefined;
+  }
+  const value = parseFloat(match[1]);
+  const unit = match[2].toLowerCase();
+  const tokens = unit === "m" ? value * 1024 * 1024 : value * 1024;
+  return Math.floor(tokens);
+}
+
 export function getCompactPromptTokenThreshold(model: string): number {
+  const fromSuffix = parseContextSizeSuffix(model);
+  if (fromSuffix !== undefined) {
+    return fromSuffix;
+  }
   return DEEPSEEK_V4_MODELS.has(model)
     ? DEEPSEEK_V4_COMPACT_PROMPT_TOKEN_THRESHOLD
     : DEFAULT_COMPACT_PROMPT_TOKEN_THRESHOLD;
